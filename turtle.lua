@@ -1,3 +1,8 @@
+--turtle API for use in moving the robot, I prefer the turtle keyword and I also added
+--functionality for moving multiple times (turtle.forward(3)) would move the robot 3 blocks forward
+--also turtle.right intead of turnRight for convenience. Functions have no return value.
+--to use in your own projects make sure you have the file in your robot and they you are requiring it in your program
+
 local robot = require("robot")
 turtle = {}
 turtle.__index = turtle
