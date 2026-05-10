@@ -1,12 +1,7 @@
---turtle API for use in moving the robot, I prefer the turtle keyword and I also added
---functionality for moving multiple times (turtle.forward(3)) would move the robot 3 blocks forward
---also turtle.right intead of turnRight for convenience. Functions have no return value.
---to use in your own projects make sure you have the file in your robot and they you are requiring it in your program
-
 local robot = require("robot")
 turtle = {}
 turtle.__index = turtle
-
+ 
 function turtle.right(...)
   local t = {...}
   local a = t[1]
@@ -22,7 +17,7 @@ function turtle.right(...)
     robot.turnRight()
   end
 end
-
+ 
 function turtle.left(...)
   local t = {...}
   local a = t[1]
@@ -38,6 +33,8 @@ function turtle.left(...)
   end
 end
 
+-- moves the turtle x amount forward, once if 0.
+-- returns the amount the turtle moved [number], false if it ever fails [bool], and the failure reason [string]
 function turtle.forward(...)
   local t = {...}
   local a = t[1]
@@ -45,14 +42,23 @@ function turtle.forward(...)
   
   if (type(a) == 'number') then  
     while (i  < a) do
-      robot.forward()
+      local forward_success, fail_reason = robot.forward()
+      if not forward_success then 
+        return i, false, fail_reason
+      end
       i = i + 1
     end
+    return a, true
   else
-    robot.forward()  
+    local forward_success, fail_reason = robot.forward()
+    if not forward_success then
+      return 0, false, fail_reason
+    else
+      return 1, true
+    end
   end
 end
-
+ 
 function turtle.back(...)
   local t = {...}
   local a = t[1]
@@ -60,42 +66,69 @@ function turtle.back(...)
   
   if (type(a) == 'number') then
     while(i < a) do
-      robot.back()
+      local backward_success, fail_reason = robot.back()
+      if not backward_success then
+        return i, false, fail_reason
+      end
       i = i + 1
     end
+    return a, true
   else
-    robot.back()
+    local backward_success, fail_reason = robot.back()
+    if not backward_success then
+      return i, false, fail_reason
+    else
+      return 1, true
+    end
   end
 end
-
+ 
 function turtle.up(...)
   local t = {...}
   local a = t[1]
   local i = 0
-
+ 
   if (type(a) == 'number') then
     while(i < a) do
-      robot.up()
+      local up_success, fail_reason = robot.up()
+      if not up_success then
+        return i, false, fail_reason
+      end
       i = i + 1
     end
+    return a, true
   else
-    robot.up()
+    local up_success, fail_reason = robot.up()
+    if not up_success then
+      return 0, false, fail_reason
+    else
+      return 1, true
+    end
   end
 end
-
+ 
 function turtle.down(...)
   local t = {...}
   local a = t[1]
   local i = 0
-
+ 
   if(type(a) == 'number') then
     while(i < a) do
-      robot.down()
+      local down_success, fail_reason = robot.down()
+      if not down_success then
+        return i, false, fail_reason
+      end
       i = i + 1
     end
+    return a, true
   else
-    robot.down()
+    local down_success, fail_reason = robot.down()
+    if not down_success then
+      return 0, false, fail_reason
+    else
+      return 1, true
+    end
   end
 end
-
-return turtle 
+ 
+return turtle
