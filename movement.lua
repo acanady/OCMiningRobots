@@ -135,15 +135,15 @@ function movement.forward(dist)
     if distance_traveled == 0 then
         return 0, success, fail_reason
     end
-    --If facing north we add to Z
+    -- if facing north we remove from z
     if location.dir == 0 then
-        location.z = location.z + distance_traveled
+        location.z = location.z - distance_traveled
     -- if facing east we add to x
     elseif location.dir == 1 then
         location.x = location.x + distance_traveled
-    -- if facing south we remove from z
+    -- if facing south we add to z
     elseif location.dir == 2 then
-        location.z = location.z - distance_traveled
+        location.z = location.z + distance_traveled
     -- if facing west we remove from x
     else
         location.x = location.x - distance_traveled
@@ -162,21 +162,46 @@ function movement.back(dist)
     if distance_traveled == 0 then
         return 0, success, fail_reason
     end
-    --If facing north we remove from Z
+    --If facing north we add to Z
     if location.dir == 0 then
-        location.z = location.z - distance_traveled
+        location.z = location.z + distance_traveled
     -- if facing east we remove from X
     elseif location.dir == 1 then
         location.x = location.x - distance_traveled
-    -- if facing south we add to Z
+    -- if facing south we remove from Z
     elseif location.dir == 2 then
-        location.z = location.z + distance_traveled
+        location.z = location.z - distance_traveled
     -- if facing west we add to X
     else
         location.x = location.x + distance_traveled
     end
     save_location(location,"location.txt")
     return distance_traveled, success, fail_reason
+end
+
+-- moves the robot to the given x-coordinate relative to home
+-- only moves in the x direction, y and z remain constant
+
+function movement.moveX(xcoord)
+    if location == nil then
+        print("Error, current location not found when attempting to moveX")
+        return
+    end
+    local success = movement.go_to({x=xcoord,y=location.y,z=location.z})
+    if not success then
+        print("Failure attempting to move to x:" .. xcoord .. " please remove obstacles and try again")
+    end
+end
+
+function movement.moveZ(zcoord)
+    if location == nil then
+        print("Error, current location not found when attempting to moveZ")
+        return
+    end
+    local success = movement.go_to({x=location.x,y=location.y,z=zcoord})
+    if not success then
+        print("Failure attempting to move to z:" .. zcoord .. " please remove obstacles and try again")
+    end
 end
 
 -- moves the robot up the specified distance
@@ -211,15 +236,18 @@ function movement.down(dist)
     return distance_traveled, success, fail_reason
 end
 
- -- sets the home location of the robot, all co-ordinates used will assume the curent location as 0,0,0 with the
- -- given facing direction. If no direction is provided, defaults to North: dir=0
+-- sets the home location of the robot, used as a reference point for all movement
+-- for example if home is set to 0,0,0 and the robot is at home when, move.forward(2) is called its internal location will read
+-- 0,0,2. As it is 2 blocks away from home. Positioning of other locations will be relative to home.
+-- That means if you set home relative to the worlds origin (so the x,y,z position in game of the block), other locations will also be relative to the worlds origin
+-- This will let you use normal in world co-ordinates for other locations if you so desire
 function movement.set_home(x_coord,z_coord,y_coord,dir)
     if x_coord == nil or z_coord==nil or y_coord==nil then
         print("Error when attempting to set home, x,y, and z co-ordinates are required")
         return
     end
+    save_location({x=x_coord,y=y_coord,z=z_coord,dir=dir or 0}, "home.txt")
     if location ~= nil then
-        save_location({x=x_coord,y=y_coord,z=z_coord,dir=dir or 0}, "home.txt")
         location.x=x_coord
         location.y=y_coord
         location.z=z_coord
@@ -227,9 +255,25 @@ function movement.set_home(x_coord,z_coord,y_coord,dir)
     else
         print("Error when attempting to set home, direction could not be pulled from existing location, location DNE")
     end
-
 end
 
+-- used to force reset the location of the robot, useful if the robot is pickedup and moved
+-- or if the home location is reset and the robot needs to update its current location relative to the new home
+function movement.set_current_location(x_coord,z_coord,y_coord,dir)
+    if x_coord == nil or z_coord==nil or y_coord==nil then
+        print("Error when attempting to set location, x,y, and z co-ordinates are required")
+        return
+    end
+    save_location({x=x_coord,y=y_coord,z=z_coord,dir=dir or 0}, "location.txt")
+    if location ~= nil then
+        location.x=x_coord
+        location.y=y_coord
+        location.z=z_coord
+        location.dir=dir or 0
+    else
+        print("Error when attempting to set location, direction could not be pulled from existing location, location DNE")
+    end
+end
 -- sets location for robot to drop off materials relative to the home location
 function movement.set_drop_off_location(x_coord,z_coord,y_coord, direction)
     save_location({x=x_coord,y=y_coord,z=z_coord,dir=direction}, "drop_off_location.txt")
@@ -239,19 +283,23 @@ end
 -- obstacles will still result in attempt to get close in the other co-ordinates. The obstacle will
 -- need to be removed and go_to run again. location should be accurate despite blockage as long as the
 -- robot is not picked up, if so then resetting the home after replacing it is necessary
--- loc should be an object with x,y,z values, robot will first attempt to
+-- loc should be an object with x,y,z values, dir is optional and will face the robot in the provided direction
 function movement.go_to(loc)
     if not loc then
         print("unable to reach destination: provided location is nil")
         return false
     end
-    local move_success = true
-    x_dist = location.x - loc.x
-    y_dist = location.y - loc.y
-    z_dist = location.z - loc.z
 
-    -- if x is positive we need to face west,3. if negative we need to face east, 1
-    -- if z is positive we need to face south,2. if z is negative we need to face north 0
+    if not location then
+        print("Error, current location not found when attempting go_to")
+        return false
+    end
+
+    local move_success = true
+    local x_dist = location.x - loc.x
+    local y_dist = location.y - loc.y
+    local z_dist = location.z - loc.z
+
     if x_dist ~= 0 then
         if x_dist > 0 then
             movement.face(location.dir,3)
@@ -267,9 +315,9 @@ function movement.go_to(loc)
     end
     if z_dist ~= 0 then
         if z_dist > 0 then
-            movement.face(location.dir,2)
-        else
             movement.face(location.dir,0)
+        else
+            movement.face(location.dir,2)
         end
         local amount, success, reason = movement.forward(math.abs(z_dist))
         if not success then
@@ -295,8 +343,10 @@ function movement.go_to(loc)
             end
         end
     end
-    -- face the correct direction
-    movement.face(location.dir, loc.dir)
+    -- face the correct direction if it was provided
+    if loc.dir ~= nil then
+        movement.face(location.dir, loc.dir)
+    end
     return move_success
 end
 

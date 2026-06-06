@@ -1,13 +1,25 @@
+-- script using the movement library to automatically farm a 9x9 area and
+-- create butter, cheese, and dough from pam's harvest craft
+-- in the ftb interactions remastered modpack.
+
+--example call farm 1 all 5 would farm all 3 farms for 5 iterations
+
+local args = {...}
 local move = require("movement")
 local robot = require("robot")
 local computer = require("computer")
 local inv_controller = require("component").inventory_controller
 local sides = require("sides")
 
+local farming_type = tonumber(args[1]) or 1 -- 1 for general_farming, 2 for cheese, 3 for butter, 4 for dough
+local which_farm = args[2] or "food" -- "food", "xp", or "material" "all" for all farms, only used if farming_type is set to farming
+local farming_iterations = tonumber(args[3]) or 10 -- how many iterations to farm the specified farm, only used if farming_type is set to farming
+
 -- set the current postion as the home position for the robot, should be facing North
 -- in the center of a 9x9 farming grid with no obstructions
 local food_farm_loc = {x = 11, y = 69, z = 21, dir = 1}
 local xp_farm_loc = {x=-10, y=69, z=21, dir=1}
+local mat_farm_loc = {x=0,y=69,z=21,dir=2}
 
 local function handle_error(err)
     print("Caught error:",err)
@@ -26,30 +38,30 @@ end
 -- facing does matter here, but go_to(loc) perseves this position and facing
 
 --goes to the start position of given ring
-local function go_to_farming_position(count)
+local function go_to_farming_position(count, farm_loc)
     if count < 1 or count > 4 then
         print("Farm of size min 3x3 and max 9x9 required, and must be square")
         return false
     end
-    x_pos = food_farm_loc.x + count
-    z_pos = food_farm_loc.z + count
-    success = movement.go_to({x=x_pos,y=food_farm_loc.y,z=z_pos,dir=2})
+    local x_pos = farm_loc.x + count
+    local z_pos = farm_loc.z + count
+    local success = movement.go_to({x=x_pos,y=farm_loc.y,z=z_pos,dir=2})
     return success
 end
 
-local function farm_ring(count)
+local function farm_ring(count, farm_loc)
     if count < 1 or count > 4 then
         print("Farm of size min 3x3 and max 9x9 required, and must be square")
         return false
     end
-    go_to_farming_position(count)
+    go_to_farming_position(count, farm_loc)
     for i = 1, 4 do
+        move.right(1)
         for j=1,count*2 do
             robot.useDown()
-            robot.userUp()
+            robot.useUp()
             move.forward(1)
         end
-        move.right(1)
     end
 end
 
@@ -76,16 +88,16 @@ local function drop_off_materials(loc, return_loc)
     end
 end
 
-local function farm(count)
+local function farm(count, farm_loc)
     local drop_off_loc = move.load_location("drop_off.txt")
     if count < 1 or count > 4 then
         print("Farm of size min 3x3 and max 9x9 required, and must be square")
         return false
     end
     for i = 2,count,2 do
-        farm_ring(i)
-        print("attemping to go home from farm function")
-        local ok, err = xpcall(move.go_home, debug.traceback)
+        farm_ring(i, farm_loc)
+        print("attemping to go back to farm location from farm function")
+        local ok, err = xpcall(move.go_to, debug.traceback, farm_loc)
             if not ok then
                 handle_error(err)
             end
@@ -232,23 +244,81 @@ local function create_butter(requested_amount)
    move.go_to(xp_farm_loc)
 end
 
-function main()
-    while true do
-        local ok, err = xpcall(farm, debug.traceback, 4)
-        if not ok then
-            handle_error(err)
-            break
-        end
-        move.go_home()
-        if computer.energy() < 5000 then
-            print("Energy low")
-            move.go_charge(move.get_home())
-        else
-            os.sleep(60)
-        end
+-- Uses the wood basin to create dough
+local function create_dough(requested_amount)
+    move.go_to(xp_farm_loc)
+    move.go_to({x=-6,y=69,z=25})
+    get_salt(requested_amount)
+    get_flour(requested_amount)
+    local salt_data = inv_controller.getStackInInternalSlot(salt_slot)
+    local flour_data = inv_controller.getStackInInternalSlot(flour_slot)
+    local total_crafts = math.min(salt_data.size, flour_data.size)
+    if total_crafts == 0 then
+        print("Unable to craft dough, not enough materials")
+        return 
+    end
+    for i=1,total_crafts do
+        robot.select(flour_slot)
+        -- equip the flour
+        inv_controller.equip()
+        robot.useDown()
+        -- unequip the flour
+        inv_controller.equip()
+        robot.select(salt_slot)
+        -- equip the salt
+        inv_controller.equip()
+        robot.useDown()
+        -- unequip the salt
+        inv_controller.equip()
+        robot.useDown()
+        os.sleep(2)
+        robot.useDown()
+        os.sleep(2)
+   end
+   move.go_to(xp_farm_loc)
+end
+
+-- farms from multiple farms in a row
+---@param which_farm string 
+---@param size number the size of the farm, must be 1,2,3, or 4 corresponding to a farm size of 3x3, 5x5, 7x7, or 9x9
+local function multi_farm(size, which_farm)
+    if which_farm == "food" then
+        farm(size, food_farm_loc)
+    end
+    if which_farm == "xp" then
+        farm(size, xp_farm_loc)
+    end
+    if which_farm == "material" then
+        farm(size, mat_farm_loc)
+    end
+    if which_farm == "all" then
+        farm(size, food_farm_loc)
+        farm(size, xp_farm_loc)
+        farm(size, mat_farm_loc)
     end
 end
 
--- main()
--- create_cheese(8)
-create_butter(8)
+function main()
+    if farming_type == 1 then
+        for i=1, farming_iterations do
+            local ok, err = xpcall(multi_farm, debug.traceback, 4, which_farm)
+            if not ok then
+                handle_error(err)
+            end
+            if computer.energy() < 5000 then
+                print("Energy low")
+                move.go_charge(move.get_location())
+            else
+                os.sleep(10)
+            end
+        end
+    elseif farming_type == 2 then
+        create_cheese(10)
+    elseif farming_type == 3 then
+        create_butter(10)
+    elseif farming_type == 4 then
+        create_dough(64)
+    end
+end
+
+main()
